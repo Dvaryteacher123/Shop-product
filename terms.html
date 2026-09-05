@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masharti na Sheria - STORE</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-8IRm50zrlHWjG-jpfzrh0YtprC1Tsaw",
+            authDomain: "product-store-6a651.firebaseapp.com",
+            projectId: "product-store-6a651",
+            storageBucket: "product-store-6a651.firebasestorage.app",
+            messagingSenderId: "379449735108",
+            appId: "1:379449735108:web:bf0bb51d68f28273cdd691"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // DOM Elements
+        const cartCount = document.getElementById('cartCount');
+        const userInfo = document.getElementById('userInfo');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+
+        // Update Cart Count
+        function updateCartCount() {
+            const cart = JSON.parse(localStorage.getItem('cart')) || [];
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            cartCount.textContent = totalItems;
+        }
+
+        // Show Notification
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Search
+        window.searchProducts = function() {
+            const searchTerm = searchInput.value.trim().toLowerCase();
+            if (searchTerm === '') {
+                window.location.href = '/shop.html';
+                return;
+            }
+            window.location.href = `/search.html?q=${encodeURIComponent(searchTerm)}`;
+        };
+
+        // Auth State
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userInfo.innerHTML = `
+                    <span class="user-name">${user.displayName || user.email || 'Mteja'}</span>
+                    <img src="${user.photoURL || 'https://via.placeholder.com/40'}" 
+                         alt="Profile" 
+                         class="user-avatar">
+                `;
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'inline-block';
+            } else {
+                userInfo.innerHTML = '';
+                loginBtn.style.display = 'inline-block';
+                logoutBtn.style.display = 'none';
+            }
+        });
+
+        // Logout
+        window.logoutUser = function() {
+            signOut(auth).then(() => {
+                showNotification('Umefanikiwa kutoka! 👋');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }).catch((error) => {
+                console.error('Error logging out:', error);
+                showNotification('Imeshindwa kutoka, jaribu tena');
+            });
+        };
+
+        // Initialize
+        updateCartCount();
+
+        // Event Listeners
+        searchBtn.addEventListener('click', searchProducts);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchProducts();
+        });
+
+        // Make functions global
+        window.logoutUser = logoutUser;
+        window.searchProducts = searchProducts;
+
+        console.log('✅ Terms page initialized with Firebase');
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .logo span {
+            color: #ffd700;
+        }
+
+        .search-bar {
+            display: flex;
+            flex: 1;
+            max-width: 400px;
+            min-width: 150px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 25px 0 0 25px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .search-bar button {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            background: #ffd700;
+            color: #333;
+            border-radius: 0 25px 25px 0;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.3s;
+        }
+
+        .nav-links a:hover {
+            opacity: 0.8;
+        }
+
+        .nav-links a.active {
+            color: #ffd700;
+        }
+
+        .cart-link {
+            position: relative;
+        }
+
+        .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -12px;
+            background: #ff4444;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 7px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 2px solid white;
+            object-fit: cover;
+        }
+
+        .user-name {
+            font-size: 0.9rem;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .auth-btn {
+            padding: 0.4rem 1rem;
+            border: 2px solid white;
+            background: transparent;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .auth-btn:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .logout-btn {
+            padding: 0.4rem 1rem;
+            border: 2px solid #ff4444;
+            background: transparent;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: none;
+        }
+
+        .logout-btn:hover {
+            background: #ff4444;
+            color: white;
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            margin-bottom: 2rem;
+            color: #777;
+        }
+
+        .breadcrumb a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb span {
+            margin: 0 0.5rem;
+        }
+
+        /* Page Header */
+        .page-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .page-header h1 {
+            font-size: 2.5rem;
+            color: #333;
+        }
+
+        .page-header p {
+            color: #777;
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Policy Content */
+        .policy-container {
+            background: white;
+            border-radius: 15px;
+            padding: 2.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        .policy-section {
+            margin-bottom: 2.5rem;
+        }
+
+        .policy-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .policy-section h2 {
+            font-size: 1.4rem;
+            color: #667eea;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .policy-section h2 .icon {
+            font-size: 1.8rem;
+        }
+
+        .policy-section p {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 0.8rem;
+        }
+
+        .policy-section ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .policy-section ul li {
+            color: #555;
+            line-height: 1.8;
+            padding: 0.5rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .policy-section ul li:last-child {
+            border-bottom: none;
+        }
+
+        .policy-section ul li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .policy-section ul li strong {
+            color: #333;
+        }
+
+        .policy-section .highlight-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 1rem 1.5rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1rem 0;
+        }
+
+        .policy-section .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #4CAF50;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 9999;
+        }
+
+        .notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Footer */
+        .footer {
+            background: #2d3748;
+            color: white;
+            padding: 3rem 2rem 1rem 2rem;
+            margin-top: 3rem;
+        }
+
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer h4 {
+            margin-bottom: 1rem;
+            color: #ffd700;
+        }
+
+        .footer a {
+            display: block;
+            color: #cbd5e0;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+            transition: color 0.3s;
+        }
+
+        .footer a:hover {
+            color: #ffd700;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 1rem;
+            border-top: 1px solid #4a5568;
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-links {
+                justify-content: center;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
+            }
+
+            .policy-container {
+                padding: 1.5rem;
+            }
+
+            .policy-section h2 {
+                font-size: 1.2rem;
+            }
+
+            .footer-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo" onclick="window.location.href='/'">
+                🏪 <span>STORE</span>
+            </div>
+            
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Tafuta nguo...">
+                <button id="searchBtn">🔍</button>
+            </div>
+
+            <nav class="nav-links">
+                <a href="/shop.html">Duka</a>
+                <a href="/categories.html">Kategoria</a>
+                <a href="/trend.html">🔥 Trend</a>
+                <a href="/orders.html">Maagizo</a>
+                <a href="/wishlist.html">❤️</a>
+                <a href="/cart.html" class="cart-link">
+                    🛒 <span class="cart-count" id="cartCount">0</span>
+                </a>
+                <div class="user-info" id="userInfo"></div>
+                <div class="auth-buttons">
+                    <a href="/login.html" class="auth-btn" id="loginBtn">Ingia</a>
+                    <button class="logout-btn" id="logoutBtn" onclick="logoutUser()">Toka</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Breadcrumb -->
+        <div class="breadcrumb">
+            <a href="/">Nyumbani</a>
+            <span>›</span>
+            <span>📜 Masharti na Sheria</span>
+        </div>
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1>📜 Masharti na <span style="color: #667eea;">Sheria</span></h1>
+            <p>Soma masharti na sheria za kutumia STORE</p>
+        </div>
+
+        <!-- Policy Content -->
+        <div class="policy-container">
+            <!-- Introduction -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">📋</span>
+                    Utangulizi
+                </h2>
+                <p>
+                    Karibu kwenye STORE. Kwa kutumia tovuti yetu na kufanya ununuzi, unakubali 
+                    kufuata masharti na sheria zilizowekwa hapa. Tafadhali soma kwa makini 
+                    kabla ya kutumia huduma zetu.
+                </p>
+                <div class="highlight-box">
+                    <p>
+                        <strong>💡 Muhimu:</strong> Masharti haya yanatumika kwa wateja wote 
+                        wa STORE. Ikiwa hukubaliani na masharti haya, tafadhali usitumie 
+                        tovuti yetu.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Account -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">👤</span>
+                    Akaunti ya Mtumiaji
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Usajili:</strong> Unatakiwa kujisajili na kutoa taarifa sahihi 
+                        na kamili.
+                    </li>
+                    <li>
+                        <strong>Usalama:</strong> Wewe ndiye mwenye jukumu la kulinda nenosiri 
+                        lako na shughuli zote zinazofanyika kwenye akaunti yako.
+                    </li>
+                    <li>
+                        <strong>Taarifa:</strong> Unatakiwa kuhakikisha taarifa zako ni sahihi 
+                        na zimesasishwa.
+                    </li>
+                    <li>
+                        <strong>Kufunga Akaunti:</strong> Tuna haki ya kufunga au kusimamisha 
+                        akaunti yako ikiwa unakiuka masharti haya.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Orders -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">📦</span>
+                    Maagizo na Malipo
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Kuweka Agizo:</strong> Unatakiwa kutoa taarifa sahihi wakati 
+                        wa kuweka agizo.
+                    </li>
+                    <li>
+                        <strong>Malipo:</strong> Malipo yanapaswa kufanywa kabla ya bidhaa 
+                        kusafirishwa.
+                    </li>
+                    <li>
+                        <strong>Bei:</strong> Bei zote ziko katika TSh (Tanzania Shilling) 
+                        na zinaweza kubadilika bila taarifa.
+                    </li>
+                    <li>
+                        <strong>Kughairi Agizo:</strong> Unaweza kughairi agizo lako kabla 
+                        ya kusafirishwa kwa kuwasiliana nasi.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Products -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">👕</span>
+                    Bidhaa na Ubora
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Maelezo:</strong> Tunajitahidi kutoa maelezo sahihi ya bidhaa 
+                        zetu.
+                    </li>
+                    <li>
+                        <strong>Picha:</strong> Picha za bidhaa ni za kielelezo na zinaweza 
+                        kutofautiana kidogo na bidhaa halisi.
+                    </li>
+                    <li>
+                        <strong>Ubora:</strong> Bidhaa zetu zote ni za ubora wa juu na 
+                        zimechaguliwa kwa makini.
+                    </li>
+                    <li>
+                        <strong>Upatikanaji:</strong> Bidhaa zinaweza kuisha. Tutakujulisha 
+                        ikiwa bidhaa uliyoagiza haipatikani.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Shipping -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">🚚</span>
+                    Usafirishaji
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Muda:</strong> Usafirishaji unachukua siku 2-3 za kazi 
+                        baada ya malipo kuthibitishwa.
+                    </li>
+                    <li>
+                        <strong>Gharama:</strong> Usafirishaji ni bure kwa maagizo yote.
+                    </li>
+                    <li>
+                        <strong>Anwani:</strong> Tafadhali hakikisha anwani yako ni sahihi 
+                        ili kuepuka kuchelewa.
+                    </li>
+                    <li>
+                        <strong>Ucheleweshaji:</strong> Hatutawajibika kwa ucheleweshaji 
+                        unaosababishwa na mambo nje ya udhibiti wetu.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Returns -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">🔄</span>
+                    Kurudisha Bidhaa
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Muda:</strong> Unaweza kurudisha bidhaa ndani ya siku 7 
+                        tangu ulipopokea.
+                    </li>
+                    <li>
+                        <strong>Hali:</strong> Bidhaa lazima iwe katika hali yake asili 
+                        na haijatumika.
+                    </li>
+                    <li>
+                        <strong>Gharama:</strong> Gharama za kurudisha ni zako isipokuwa 
+                        bidhaa ilikuwa na kasoro.
+                    </li>
+                    <li>
+                        <strong>Refund:</strong> Refund itafanywa ndani ya siku 3 baada 
+                        ya kukagua bidhaa.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Privacy -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">🔒</span>
+                    Faragha na Data
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Taarifa:</strong> Tunakusanya taarifa zako ili kukuhudumia 
+                        vizuri zaidi.
+                    </li>
+                    <li>
+                        <strong>Usalama:</strong> Tunatumia teknolojia salama kulinda 
+                        taarifa zako.
+                    </li>
+                    <li>
+                        <strong>Matumizi:</strong> Taarifa zako hazitashirishwa na wahusika 
+                        wengine bila idhini yako.
+                    </li>
+                    <li>
+                        <strong>Mawasiliano:</strong> Tunaweza kukutumia barua pepe kuhusu 
+                        maagizo na matangazo.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Liability -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">⚖️</span>
+                    Wajibu na Dhima
+                </h2>
+                <ul>
+                    <li>
+                        <strong>Dhima:</strong> STORE haitawajibika kwa hasara au uharibifu 
+                        wowote unaotokana na matumizi ya tovuti.
+                    </li>
+                    <li>
+                        <strong>Mabadiliko:</strong> Tuna haki ya kubadilisha masharti haya 
+                        wakati wowote.
+                    </li>
+                    <li>
+                        <strong>Sheria:</strong> Masharti haya yanatawaliwa na sheria za 
+                        Tanzania.
+                    </li>
+                    <li>
+                        <strong>Maelezo:</strong> Ikiwa una maswali, tafadhali wasiliana nasi.
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Contact -->
+            <div class="policy-section">
+                <h2>
+                    <span class="icon">📞</span>
+                    Wasiliana Nasi
+                </h2>
+                <p>
+                    Ikiwa una maswali au wasiwasi kuhusu masharti na sheria, tafadhali 
+                    wasiliana nasi kupitia:
+                </p>
+                <ul>
+                    <li><strong>📞 Simu:</strong> +255 724 525 910</li>
+                    <li><strong>📧 Barua Pepe:</strong> info@store.com</li>
+                    <li><strong>📱 WhatsApp:</strong> +255 724 525 910</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div>
+                <h4>🏪 STORE</h4>
+                <p>Duka lako la nguo bora</p>
+            </div>
+            <div>
+                <h4>Links</h4>
+                <a href="/about.html">Kuhusu Sisi</a>
+                <a href="/contact.html">Wasiliana Nasi</a>
+                <a href="/faq.html">Maswali</a>
+            </div>
+            <div>
+                <h4>Msaada</h4>
+                <a href="/refund.html">Refund</a>
+                <a href="/terms.html">Masharti</a>
+                <a href="/privacy.html">Sera ya Faragha</a>
+            </div>
+            <div>
+                <h4>Wasiliana</h4>
+                <p>📞 +255 724 525 910</p>
+                <p>📧 info@store.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 STORE. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+  </html>
