@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingia - STORE</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-8IRm50zrlHWjG-jpfzrh0YtprC1Tsaw",
+            authDomain: "product-store-6a651.firebaseapp.com",
+            projectId: "product-store-6a651",
+            storageBucket: "product-store-6a651.firebasestorage.app",
+            messagingSenderId: "379449735108",
+            appId: "1:379449735108:web:bf0bb51d68f28273cdd691"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // DOM Elements
+        const loginForm = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const forgotPasswordLink = document.getElementById('forgotPassword');
+        const showPasswordBtn = document.getElementById('showPassword');
+
+        // Check if user is already logged in
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is logged in, redirect to home
+                window.location.href = '/';
+            }
+        });
+
+        // Show/Hide Password
+        showPasswordBtn.addEventListener('click', function() {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            this.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+        });
+
+        // Login Form Submit
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const email = emailInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            // Validate
+            if (!email || !password) {
+                showError('Tafadhali jaza barua pepe na nenosiri');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('Nenosiri lazima liwe angalau herufi 6');
+                return;
+            }
+
+            // Show loading
+            loginBtn.disabled = true;
+            loginBtn.textContent = '⏳ Inaingia...';
+            hideError();
+            hideSuccess();
+
+            try {
+                // Sign in with Firebase
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                // Get user data from Firestore
+                const userRef = doc(db, 'users', user.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    console.log('User data loaded:', userData);
+                }
+
+                showSuccess('✅ Umefanikiwa kuingia!');
+                
+                // Redirect after short delay
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+
+            } catch (error) {
+                console.error('Login error:', error);
+                
+                // Handle specific errors
+                switch(error.code) {
+                    case 'auth/user-not-found':
+                        showError('❌ Akaunti hii haipo. Tafadhali jiandikisha.');
+                        break;
+                    case 'auth/wrong-password':
+                        showError('❌ Nenosiri si sahihi. Jaribu tena.');
+                        break;
+                    case 'auth/invalid-email':
+                        showError('❌ Barua pepe si sahihi.');
+                        break;
+                    case 'auth/user-disabled':
+                        showError('❌ Akaunti yako imezimwa. Wasiliana nasi.');
+                        break;
+                    case 'auth/too-many-requests':
+                        showError('❌ Majaribio mengi sana. Jaribu baadaye.');
+                        break;
+                    default:
+                        showError('❌ Imeshindwa kuingia. Jaribu tena.');
+                }
+                
+                loginBtn.disabled = false;
+                loginBtn.textContent = '🔑 Ingia';
+            }
+        });
+
+        // Forgot Password
+        forgotPasswordLink.addEventListener('click', async function(e) {
+            e.preventDefault();
+            
+            const email = emailInput.value.trim();
+            
+            if (!email) {
+                showError('Tafadhali ingiza barua pepe yako kwanza');
+                emailInput.focus();
+                return;
+            }
+
+            if (!email.includes('@')) {
+                showError('Tafadhali ingiza barua pepe sahihi');
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showSuccess('✅ Email ya kuweka upya nenosiri imetumwa!');
+                showError(''); // Clear error
+            } catch (error) {
+                console.error('Password reset error:', error);
+                switch(error.code) {
+                    case 'auth/user-not-found':
+                        showError('❌ Akaunti hii haipo');
+                        break;
+                    case 'auth/invalid-email':
+                        showError('❌ Barua pepe si sahihi');
+                        break;
+                    default:
+                        showError('❌ Imeshindwa kutuma email. Jaribu tena.');
+                }
+            }
+        });
+
+        // Helper Functions
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = message ? 'block' : 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = message ? 'block' : 'none';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+
+        function hideSuccess() {
+            successMessage.style.display = 'none';
+        }
+
+        // Enter key support for forgot password
+        emailInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !passwordInput.value) {
+                forgotPasswordLink.click();
+            }
+        });
+
+        console.log('✅ Login page initialized with Firebase');
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 450px;
+            padding: 2.5rem;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header .logo {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 0.3rem;
+        }
+
+        .login-header p {
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        .login-header p span {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Messages */
+        .message {
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            display: none;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 0.3rem;
+            font-size: 0.9rem;
+        }
+
+        .form-group label .required {
+            color: #ff4444;
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            padding-right: 3rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .input-group input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-group input.error {
+            border-color: #ff4444;
+        }
+
+        .input-group .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #888;
+            padding: 5px;
+        }
+
+        .input-group .toggle-password:hover {
+            color: #333;
+        }
+
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .form-options .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .form-options .remember-me input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+
+        .form-options .forgot-password {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .form-options .forgot-password:hover {
+            color: #5a67d8;
+            text-decoration: underline;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 0.9rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .login-btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .login-btn:disabled {
+            background: #999;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .signup-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        .signup-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s;
+        }
+
+        .signup-link a:hover {
+            color: #5a67d8;
+            text-decoration: underline;
+        }
+
+        /* Divider */
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0;
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .divider::before {
+            margin-right: 1rem;
+        }
+
+        .divider::after {
+            margin-left: 1rem;
+        }
+
+        /* Social Login */
+        .social-login {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .social-btn {
+            flex: 1;
+            padding: 0.7rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            background: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+
+        .social-btn:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .social-btn.google {
+            color: #DB4437;
+        }
+
+        .social-btn.facebook {
+            color: #4267B2;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 1.5rem;
+            }
+
+            .login-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .form-options {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .social-login {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <div class="logo">🏪</div>
+            <h1>Karibu <span>STORE</span></h1>
+            <p>Ingia kwenye akaunti yako</p>
+        </div>
+
+        <!-- Messages -->
+        <div class="message error" id="errorMessage"></div>
+        <div class="message success" id="successMessage"></div>
+
+        <!-- Login Form -->
+        <form id="loginForm">
+            <div class="form-group">
+                <label>Barua Pepe <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="mteja@email.com" required autocomplete="email">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Nenosiri <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Ingiza nenosiri lako" required autocomplete="current-password" minlength="6">
+                    <button type="button" class="toggle-password" id="showPassword">👁️</button>
+                </div>
+            </div>
+
+            <div class="form-options">
+                <label class="remember-me">
+                    <input type="checkbox"> Nikumbuke
+                </label>
+                <a href="#" class="forgot-password" id="forgotPassword">🔑 Umesahau nenosiri?</a>
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">🔑 Ingia</button>
+        </form>
+
+        <div class="divider">au</div>
+
+        <div class="signup-link">
+            Huna akaunti? <a href="/signup.html">Jiandikisha Sasa</a>
+        </div>
+    </div>
+
+    <script>
+        // Quick fix - ensure messages are hidden on page load
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+    </script>
+</body>
+                  </html>
