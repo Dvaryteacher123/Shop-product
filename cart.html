@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kikapu - STORE</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-8IRm50zrlHWjG-jpfzrh0YtprC1Tsaw",
+            authDomain: "product-store-6a651.firebaseapp.com",
+            projectId: "product-store-6a651",
+            storageBucket: "product-store-6a651.firebasestorage.app",
+            messagingSenderId: "379449735108",
+            appId: "1:379449735108:web:bf0bb51d68f28273cdd691"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // DOM Elements
+        const cartContainer = document.getElementById('cartContainer');
+        const cartEmpty = document.getElementById('cartEmpty');
+        const cartItems = document.getElementById('cartItems');
+        const cartSummary = document.getElementById('cartSummary');
+        const subtotalEl = document.getElementById('subtotal');
+        const discountEl = document.getElementById('discount');
+        const totalEl = document.getElementById('total');
+        const checkoutBtn = document.getElementById('checkoutBtn');
+        const clearCartBtn = document.getElementById('clearCartBtn');
+        const cartCount = document.getElementById('cartCount');
+        const userInfo = document.getElementById('userInfo');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const promoCodeInput = document.getElementById('promoCode');
+        const applyPromoBtn = document.getElementById('applyPromoBtn');
+
+        let cartItemsData = [];
+        let discount = 0;
+        let promoApplied = false;
+
+        // Load Cart Items
+        async function loadCart() {
+            const cart = JSON.parse(localStorage.getItem('cart')) || [];
+            
+            if (cart.length === 0) {
+                cartEmpty.style.display = 'block';
+                cartItems.style.display = 'none';
+                cartSummary.style.display = 'none';
+                updateCartCount();
+                return;
+            }
+
+            cartEmpty.style.display = 'none';
+            cartItems.style.display = 'block';
+            cartSummary.style.display = 'block';
+
+            cartItemsData = [];
+            let subtotal = 0;
+
+            for (const item of cart) {
+                try {
+                    const productRef = doc(db, 'products', item.id);
+                    const productSnap = await getDoc(productRef);
+                    
+                    if (productSnap.exists()) {
+                        const product = productSnap.data();
+                        const cartItem = {
+                            id: item.id,
+                            name: product.name,
+                            price: product.price || 0,
+                            imageUrl: product.imageUrl || 'https://via.placeholder.com/100',
+                            quantity: item.quantity || 1,
+                            color: item.color || null,
+                            size: item.size || null,
+                            discount: product.discount || 0,
+                            oldPrice: product.oldPrice || null,
+                            maxQuantity: product.stock || 10
+                        };
+                        cartItemsData.push(cartItem);
+                        subtotal += cartItem.price * cartItem.quantity;
+                    } else {
+                        // Product doesn't exist anymore, remove from cart
+                        const updatedCart = cart.filter(c => c.id !== item.id);
+                        localStorage.setItem('cart', JSON.stringify(updatedCart));
+                    }
+                } catch (error) {
+                    console.error('Error loading product:', error);
+                }
+            }
+
+            renderCartItems();
+            updateSummary(subtotal);
+            updateCartCount();
+        }
+
+        // Render Cart Items
+        function renderCartItems() {
+            cartItems.innerHTML = '';
+            
+            cartItemsData.forEach((item, index) => {
+                const row = document.createElement('div');
+                row.className = 'cart-item';
+                
+                // Check if product has discount
+                const hasDiscount = item.discount && item.discount > 0;
+                const discountedPrice = hasDiscount ? item.price * (1 - item.discount / 100) : item.price;
+                const itemTotal = discountedPrice * item.quantity;
+                
+                row.innerHTML = `
+                    <div class="cart-item-image">
+                        <img src="${item.imageUrl}" alt="${item.name}" 
+                             onerror="this.src='https://via.placeholder.com/100'">
+                    </div>
+                    <div class="cart-item-details">
+                        <h3>${item.name}</h3>
+                        <div class="cart-item-meta">
+                            ${item.color ? `<span class="meta-tag">🎨 ${item.color}</span>` : ''}
+                            ${item.size ? `<span class="meta-tag">📏 ${item.size}</span>` : ''}
+                        </div>
+                        <div class="cart-item-price">
+                            ${hasDiscount ? `
+                                <span class="current-price">TSh ${discountedPrice.toLocaleString()}</span>
+                                <span class="old-price">TSh ${item.price.toLocaleString()}</span>
+                                <span class="discount-tag">-${item.discount}%</span>
+                            ` : `
+                                <span class="current-price">TSh ${item.price.toLocaleString()}</span>
+                            `}
+                        </div>
+                    </div>
+                    <div class="cart-item-quantity">
+                        <button onclick="updateQuantity(${index}, -1)">−</button>
+                        <span>${item.quantity}</span>
+                        <button onclick="updateQuantity(${index}, 1)">+</button>
+                    </div>
+                    <div class="cart-item-total">
+                        <span class="item-total">TSh ${itemTotal.toLocaleString()}</span>
+                    </div>
+                    <div class="cart-item-actions">
+                        <button class="remove-btn" onclick="removeItem(${index})">✕</button>
+                    </div>
+                `;
+                cartItems.appendChild(row);
+            });
+        }
+
+        // Update Quantity
+        window.updateQuantity = function(index, change) {
+            const item = cartItemsData[index];
+            const newQuantity = item.quantity + change;
+            
+            if (newQuantity < 1) {
+                removeItem(index);
+                return;
+            }
+            
+            if (newQuantity > (item.maxQuantity || 10)) {
+                showNotification('Samahani, tumefikia kiwango cha juu cha bidhaa hii');
+                return;
+            }
+            
+            item.quantity = newQuantity;
+            
+            // Update localStorage
+            const cart = JSON.parse(localStorage.getItem('cart')) || [];
+            const cartItem = cart.find(c => c.id === item.id);
+            if (cartItem) {
+                cartItem.quantity = newQuantity;
+                localStorage.setItem('cart', JSON.stringify(cart));
+            }
+            
+            renderCartItems();
+            updateSummary();
+            updateCartCount();
+        };
+
+        // Remove Item
+        window.removeItem = function(index) {
+            const item = cartItemsData[index];
+            
+            if (confirm(`Je, una uhakika unataka kuondoa "${item.name}" kwenye kikapu?`)) {
+                cartItemsData.splice(index, 1);
+                
+                // Update localStorage
+                let cart = JSON.parse(localStorage.getItem('cart')) || [];
+                cart = cart.filter(c => c.id !== item.id);
+                localStorage.setItem('cart', JSON.stringify(cart));
+                
+                renderCartItems();
+                updateSummary();
+                updateCartCount();
+                showNotification('Bidhaa imeondolewa kwenye kikapu');
+                
+                if (cartItemsData.length === 0) {
+                    cartEmpty.style.display = 'block';
+                    cartItems.style.display = 'none';
+                    cartSummary.style.display = 'none';
+                }
+            }
+        };
+
+        // Update Summary
+        function updateSummary() {
+            let subtotal = 0;
+            let totalItems = 0;
+            
+            cartItemsData.forEach(item => {
+                const price = item.discount ? item.price * (1 - item.discount / 100) : item.price;
+                subtotal += price * item.quantity;
+                totalItems += item.quantity;
+            });
+            
+            // Apply discount if promo is active
+            let discountAmount = 0;
+            if (promoApplied) {
+                discountAmount = subtotal * (discount / 100);
+            }
+            
+            const total = subtotal - discountAmount;
+            
+            subtotalEl.textContent = `TSh ${subtotal.toLocaleString()}`;
+            discountEl.textContent = promoApplied ? `-TSh ${discountAmount.toLocaleString()}` : 'TSh 0';
+            totalEl.textContent = `TSh ${total.toLocaleString()}`;
+        }
+
+        // Apply Promo Code
+        window.applyPromo = function() {
+            const code = promoCodeInput.value.trim().toUpperCase();
+            
+            // List of promo codes (in a real app, this would come from Firestore)
+            const promos = {
+                'SAVE10': 10,
+                'SAVE20': 20,
+                'STORE50': 50,
+                'WELCOME': 15
+            };
+            
+            if (promoApplied) {
+                showNotification('Promo code tayari imetumika');
+                return;
+            }
+            
+            if (promos[code]) {
+                discount = promos[code];
+                promoApplied = true;
+                applyPromoBtn.textContent = '✅ Imetumika';
+                applyPromoBtn.style.background = '#4CAF50';
+                promoCodeInput.disabled = true;
+                showNotification(`Promo code "${code}" imetumika! Umeokoa ${discount}%`);
+                updateSummary();
+            } else {
+                showNotification('Promo code si sahihi. Jaribu tena');
+                promoCodeInput.value = '';
+            }
+        };
+
+        // Clear Cart
+        window.clearCart = function() {
+            if (confirm('Je, una uhakika unataka kufuta kikapu chote?')) {
+                localStorage.setItem('cart', JSON.stringify([]));
+                cartItemsData = [];
+                renderCartItems();
+                updateSummary();
+                updateCartCount();
+                cartEmpty.style.display = 'block';
+                cartItems.style.display = 'none';
+                cartSummary.style.display = 'none';
+                showNotification('Kikapu kimefutwa');
+            }
+        };
+
+        // Proceed to Checkout
+        window.proceedToCheckout = function() {
+            const user = auth.currentUser;
+            if (!user) {
+                showNotification('Tafadhali ingia kwanza kabla ya kuendelea');
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (cartItemsData.length === 0) {
+                showNotification('Kikapu chako ni tupu');
+                return;
+            }
+            
+            window.location.href = '/checkout.html';
+        };
+
+        // Update Cart Count
+        function updateCartCount() {
+            const cart = JSON.parse(localStorage.getItem('cart')) || [];
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            cartCount.textContent = totalItems;
+        }
+
+        // Show Notification
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Search
+        window.searchProducts = function() {
+            const searchTerm = searchInput.value.trim().toLowerCase();
+            if (searchTerm === '') {
+                window.location.href = '/shop.html';
+                return;
+            }
+            window.location.href = `/search.html?q=${encodeURIComponent(searchTerm)}`;
+        };
+
+        // Auth State
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userInfo.innerHTML = `
+                    <span class="user-name">${user.displayName || user.email || 'Mteja'}</span>
+                    <img src="${user.photoURL || 'https://via.placeholder.com/40'}" 
+                         alt="Profile" 
+                         class="user-avatar">
+                `;
+                loginBtn.style.display = 'none';
+                logoutBtn.style.display = 'inline-block';
+            } else {
+                userInfo.innerHTML = '';
+                loginBtn.style.display = 'inline-block';
+                logoutBtn.style.display = 'none';
+            }
+        });
+
+        // Logout
+        window.logoutUser = function() {
+            signOut(auth).then(() => {
+                showNotification('Umefanikiwa kutoka! 👋');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }).catch((error) => {
+                console.error('Error logging out:', error);
+                showNotification('Imeshindwa kutoka, jaribu tena');
+            });
+        };
+
+        // Initialize
+        loadCart();
+
+        // Event Listeners
+        checkoutBtn.addEventListener('click', proceedToCheckout);
+        clearCartBtn.addEventListener('click', clearCart);
+        applyPromoBtn.addEventListener('click', applyPromo);
+        promoCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') applyPromo();
+        });
+        searchBtn.addEventListener('click', searchProducts);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchProducts();
+        });
+
+        // Make functions global
+        window.updateQuantity = updateQuantity;
+        window.removeItem = removeItem;
+        window.clearCart = clearCart;
+        window.proceedToCheckout = proceedToCheckout;
+        window.applyPromo = applyPromo;
+        window.logoutUser = logoutUser;
+        window.searchProducts = searchProducts;
+
+        console.log('✅ Cart page initialized with Firebase');
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .logo span {
+            color: #ffd700;
+        }
+
+        .search-bar {
+            display: flex;
+            flex: 1;
+            max-width: 400px;
+            min-width: 150px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 25px 0 0 25px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .search-bar button {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            background: #ffd700;
+            color: #333;
+            border-radius: 0 25px 25px 0;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.3s;
+        }
+
+        .nav-links a:hover {
+            opacity: 0.8;
+        }
+
+        .nav-links a.active {
+            color: #ffd700;
+        }
+
+        .cart-link {
+            position: relative;
+        }
+
+        .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -12px;
+            background: #ff4444;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 7px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 2px solid white;
+            object-fit: cover;
+        }
+
+        .user-name {
+            font-size: 0.9rem;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .auth-btn {
+            padding: 0.4rem 1rem;
+            border: 2px solid white;
+            background: transparent;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .auth-btn:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .logout-btn {
+            padding: 0.4rem 1rem;
+            border: 2px solid #ff4444;
+            background: transparent;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: none;
+        }
+
+        .logout-btn:hover {
+            background: #ff4444;
+            color: white;
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            margin-bottom: 2rem;
+            color: #777;
+        }
+
+        .breadcrumb a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb span {
+            margin: 0 0.5rem;
+        }
+
+        /* Page Header */
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-header h1 {
+            font-size: 2.5rem;
+            color: #333;
+        }
+
+        .page-header p {
+            color: #777;
+            margin-top: 0.5rem;
+        }
+
+        /* Cart Container */
+        .cart-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+
+        /* Cart Items */
+        .cart-items-section {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        .cart-items-header {
+            display: grid;
+            grid-template-columns: 3fr 1fr 1fr 0.5fr;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e8ecf1;
+            font-weight: 600;
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        .cart-item {
+            display: grid;
+            grid-template-columns: 0.8fr 2fr 1fr 1fr 0.5fr;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e8ecf1;
+            transition: background 0.3s;
+        }
+
+        .cart-item:hover {
+            background: #f8f9fa;
+        }
+
+        .cart-item-image {
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .cart-item-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .cart-item-details h3 {
+            font-size: 1rem;
+            margin-bottom: 0.3rem;
+            color: #333;
+        }
+
+        .cart-item-meta {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.3rem;
+        }
+
+        .meta-tag {
+            background: #f0f0f0;
+            padding: 0.1rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .cart-item-price {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .current-price {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 0.95rem;
+        }
+
+        .old-price {
+            color: #999;
+            text-decoration: line-through;
+            font-size: 0.85rem;
+        }
+
+        .discount-tag {
+            background: #ff4444;
+            color: white;
+            padding: 0.1rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+        }
+
+        .cart-item-quantity {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .cart-item-quantity button {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .cart-item-quantity button:hover {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .cart-item-quantity span {
+            font-weight: bold;
+            min-width: 30px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .item-total {
+            font-weight: bold;
+            font-size: 1.05rem;
+            color: #333;
+        }
+
+        .remove-btn {
+            background: none;
+            border: none;
+            color: #ff4444;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: transform 0.3s;
+            padding: 5px;
+        }
+
+        .remove-btn:hover {
+            transform: scale(1.2);
+        }
+
+        /* Cart Empty */
+        .cart-empty {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        .cart-empty .empty-icon {
+            font-size: 5rem;
+            margin-bottom: 1rem;
+        }
+
+        .cart-empty h2 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .cart-empty p {
+            color: #999;
+            margin-bottom: 1.5rem;
+        }
+
+        .cart-empty .shop-btn {
+            padding: 0.8rem 2.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .cart-empty .shop-btn:hover {
+            background: #5a67d8;
+        }
+
+        /* Cart Summary */
+        .cart-summary {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            position: sticky;
+            top: 100px;
+            align-self: start;
+        }
+
+        .cart-summary h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e8ecf1;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            color: #666;
+        }
+
+        .summary-row.total {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+            border-top: 2px solid #e8ecf1;
+            margin-top: 0.5rem;
+            padding-top: 1rem;
+        }
+
+        .summary-row.total .amount {
+            color: #667eea;
+            font-size: 1.4rem;
+        }
+
+        .promo-section {
+            margin: 1rem 0;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .promo-section input {
+            flex: 1;
+            padding: 0.6rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s;
+        }
+
+        .promo-section input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+        .promo-section button {
+            padding: 0.6rem 1.2rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            white-space: nowrap;
+        }
+
+        .promo-section button:hover {
+            background: #5a67d8;
+        }
+
+        .checkout-btn {
+            width: 100%;
+            padding: 0.8rem;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 0.5rem;
+        }
+
+        .checkout-btn:hover {
+            background: #45a049;
+        }
+
+        .clear-cart-btn {
+            width: 100%;
+            padding: 0.6rem;
+            background: transparent;
+            color: #ff4444;
+            border: 2px solid #ff4444;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 0.5rem;
+        }
+
+        .clear-cart-btn:hover {
+            background: #ff4444;
+            color: white;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #4CAF50;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 9999;
+        }
+
+        .notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Footer */
+        .footer {
+            background: #2d3748;
+            color: white;
+            padding: 3rem 2rem 1rem 2rem;
+            margin-top: 3rem;
+        }
+
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer h4 {
+            margin-bottom: 1rem;
+            color: #ffd700;
+        }
+
+        .footer a {
+            display: block;
+            color: #cbd5e0;
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+            transition: color 0.3s;
+        }
+
+        .footer a:hover {
+            color: #ffd700;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 1rem;
+            border-top: 1px solid #4a5568;
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .cart-container {
+                grid-template-columns: 1fr;
+            }
+
+            .cart-summary {
+                position: static;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-links {
+                justify-content: center;
+            }
+
+            .cart-items-header {
+                display: none;
+            }
+
+            .cart-item {
+                grid-template-columns: 1fr;
+                gap: 0.8rem;
+                padding: 1rem 0;
+            }
+
+            .cart-item-image {
+                width: 100%;
+                height: 150px;
+            }
+
+            .cart-item-details h3 {
+                font-size: 1.1rem;
+            }
+
+            .cart-item-quantity {
+                justify-content: center;
+            }
+
+            .cart-item-total {
+                text-align: center;
+            }
+
+            .cart-item-actions {
+                text-align: center;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
+            }
+
+            .footer-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo" onclick="window.location.href='/'">
+                🏪 <span>STORE</span>
+            </div>
+            
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Tafuta nguo...">
+                <button id="searchBtn">🔍</button>
+            </div>
+
+            <nav class="nav-links">
+                <a href="/shop.html">Duka</a>
+                <a href="/categories.html">Kategoria</a>
+                <a href="/trend.html">🔥 Trend</a>
+                <a href="/orders.html">Maagizo</a>
+                <a href="/wishlist.html">❤️</a>
+                <a href="/cart.html" class="cart-link active">
+                    🛒 <span class="cart-count" id="cartCount">0</span>
+                </a>
+                <div class="user-info" id="userInfo"></div>
+                <div class="auth-buttons">
+                    <a href="/login.html" class="auth-btn" id="loginBtn">Ingia</a>
+                    <button class="logout-btn" id="logoutBtn" onclick="logoutUser()">Toka</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Breadcrumb -->
+        <div class="breadcrumb">
+            <a href="/">Nyumbani</a>
+            <span>›</span>
+            <span>🛒 Kikapu</span>
+        </div>
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1>🛒 Kikapu Chako</h1>
+            <p>Angalia na thibitisha bidhaa zako kabla ya kununua</p>
+        </div>
+
+        <!-- Cart Empty -->
+        <div class="cart-empty" id="cartEmpty" style="display: none;">
+            <div class="empty-icon">🛒</div>
+            <h2>Kikapu Chako Ni Tupu</h2>
+            <p>Hajabeba bidhaa yoyote. Anza kununua sasa!</p>
+            <button class="shop-btn" onclick="window.location.href='/shop.html'">🔍 Tembelea Duka</button>
+        </div>
+
+        <!-- Cart Container -->
+        <div class="cart-container" id="cartContainer">
+            <!-- Cart Items -->
+            <div class="cart-items-section" id="cartItems" style="display: none;">
+                <div class="cart-items-header">
+                    <span>Bidhaa</span>
+                    <span>Idadi</span>
+                    <span>Jumla</span>
+                    <span></span>
+                </div>
+                <div id="cartItemsList">
+                    <!-- Cart items rendered here -->
+                </div>
+            </div>
+
+            <!-- Cart Summary -->
+            <div class="cart-summary" id="cartSummary" style="display: none;">
+                <h3>📊 Muhtasari</h3>
+                
+                <div class="summary-row">
+                    <span>Bidhaa</span>
+                    <span id="itemCount">0</span>
+                </div>
+                <div class="summary-row">
+                    <span>Jumla ya Bei</span>
+                    <span id="subtotal">TSh 0</span>
+                </div>
+                <div class="summary-row">
+                    <span>Punguzo</span>
+                    <span id="discount">TSh 0</span>
+                </div>
+                
+                <div class="promo-section">
+                    <input type="text" id="promoCode" placeholder="🔑 Ingiza Promo Code">
+                    <button id="applyPromoBtn">Tumia</button>
+                </div>
+                
+                <div class="summary-row total">
+                    <span>Jumla Kuu</span>
+                    <span class="amount" id="total">TSh 0</span>
+                </div>
+                
+                <button class="checkout-btn" id="checkoutBtn">💳 Endelea Kununua</button>
+                <button class="clear-cart-btn" id="clearCartBtn">🗑️ Futa Kikapu</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div>
+                <h4>🏪 STORE</h4>
+                <p>Duka lako la nguo bora</p>
+            </div>
+            <div>
+                <h4>Links</h4>
+                <a href="/about.html">Kuhusu Sisi</a>
+                <a href="/contact.html">Wasiliana Nasi</a>
+                <a href="/faq.html">Maswali</a>
+            </div>
+            <div>
+                <h4>Msaada</h4>
+                <a href="/refund.html">Refund</a>
+                <a href="/terms.html">Masharti</a>
+                <a href="/privacy.html">Sera ya Faragha</a>
+            </div>
+            <div>
+                <h4>Wasiliana</h4>
+                <p>📞 +255 700 000 000</p>
+                <p>📧 info@store.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 STORE. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
