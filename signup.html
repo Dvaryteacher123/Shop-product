@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jiandikisha - STORE</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, updateProfile, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-8IRm50zrlHWjG-jpfzrh0YtprC1Tsaw",
+            authDomain: "product-store-6a651.firebaseapp.com",
+            projectId: "product-store-6a651",
+            storageBucket: "product-store-6a651.firebasestorage.app",
+            messagingSenderId: "379449735108",
+            appId: "1:379449735108:web:bf0bb51d68f28273cdd691"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // DOM Elements
+        const signupForm = document.getElementById('signupForm');
+        const fullNameInput = document.getElementById('fullName');
+        const emailInput = document.getElementById('email');
+        const phoneInput = document.getElementById('phone');
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        const signupBtn = document.getElementById('signupBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const showPasswordBtn = document.getElementById('showPassword');
+        const showConfirmPasswordBtn = document.getElementById('showConfirmPassword');
+        const termsCheck = document.getElementById('termsCheck');
+
+        // Check if user is already logged in
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.location.href = '/';
+            }
+        });
+
+        // Show/Hide Password
+        showPasswordBtn.addEventListener('click', function() {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            this.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+        });
+
+        showConfirmPasswordBtn.addEventListener('click', function() {
+            const type = confirmPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            confirmPasswordInput.setAttribute('type', type);
+            this.textContent = type === 'password' ? '👁️' : '👁️‍🗨️';
+        });
+
+        // Signup Form Submit
+        signupForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fullName = fullNameInput.value.trim();
+            const email = emailInput.value.trim();
+            const phone = phoneInput.value.trim();
+            const password = passwordInput.value.trim();
+            const confirmPassword = confirmPasswordInput.value.trim();
+
+            // Validate
+            if (!fullName || !email || !phone || !password || !confirmPassword) {
+                showError('❌ Tafadhali jaza sehemu zote');
+                return;
+            }
+
+            if (fullName.length < 2) {
+                showError('❌ Jina lazima liwe na herufi angalau 2');
+                return;
+            }
+
+            if (!email.includes('@') || !email.includes('.')) {
+                showError('❌ Tafadhali ingiza barua pepe sahihi');
+                return;
+            }
+
+            if (phone.length < 10) {
+                showError('❌ Namba ya simu lazima iwe angalau tarakimu 10');
+                return;
+            }
+
+            if (password.length < 6) {
+                showError('❌ Nenosiri lazima liwe angalau herufi 6');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showError('❌ Nenosiri na uthibitisho hazilingani');
+                return;
+            }
+
+            if (!termsCheck.checked) {
+                showError('❌ Tafadhali kubali masharti na sheria');
+                return;
+            }
+
+            // Show loading
+            signupBtn.disabled = true;
+            signupBtn.textContent = '⏳ Inajiandikisha...';
+            hideError();
+            hideSuccess();
+
+            try {
+                // Create user with Firebase
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Update profile with display name
+                await updateProfile(user, {
+                    displayName: fullName
+                });
+
+                // Save user data to Firestore
+                const userRef = doc(db, 'users', user.uid);
+                await setDoc(userRef, {
+                    uid: user.uid,
+                    displayName: fullName,
+                    email: email,
+                    phone: phone,
+                    photoURL: null,
+                    role: 'user',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+
+                showSuccess('✅ Akaunti imeundwa! Unaelekezwa...');
+                
+                // Redirect after short delay
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+
+            } catch (error) {
+                console.error('Signup error:', error);
+                
+                // Handle specific errors
+                switch(error.code) {
+                    case 'auth/email-already-in-use':
+                        showError('❌ Barua pepe tayari inatumika. Tafadhali ingia.');
+                        break;
+                    case 'auth/invalid-email':
+                        showError('❌ Barua pepe si sahihi.');
+                        break;
+                    case 'auth/operation-not-allowed':
+                        showError('❌ Kujisajili kumezimwa. Wasiliana nasi.');
+                        break;
+                    case 'auth/weak-password':
+                        showError('❌ Nenosiri ni dhaifu. Tumia nenosiri lenye nguvu.');
+                        break;
+                    default:
+                        showError('❌ Imeshindwa kujisajili. Jaribu tena.');
+                }
+                
+                signupBtn.disabled = false;
+                signupBtn.textContent = '📝 Jiandikisha';
+            }
+        });
+
+        // Helper Functions
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = message ? 'block' : 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = message ? 'block' : 'none';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+
+        function hideSuccess() {
+            successMessage.style.display = 'none';
+        }
+
+        // Real-time password strength indicator
+        passwordInput.addEventListener('input', function() {
+            const password = this.value;
+            const strengthIndicator = document.getElementById('passwordStrength');
+            
+            if (password.length === 0) {
+                strengthIndicator.textContent = '';
+                strengthIndicator.style.display = 'none';
+                return;
+            }
+
+            strengthIndicator.style.display = 'block';
+            
+            let strength = 0;
+            let message = '';
+            let color = '';
+            
+            if (password.length >= 6) strength++;
+            if (password.length >= 10) strength++;
+            if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+            if (/\d/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+            
+            switch(strength) {
+                case 0:
+                case 1:
+                    message = 'Dhaifu';
+                    color = '#ff4444';
+                    break;
+                case 2:
+                    message = 'Wastani';
+                    color = '#ff9800';
+                    break;
+                case 3:
+                    message = 'Nzuri';
+                    color = '#2196F3';
+                    break;
+                case 4:
+                    message = 'Nguvu';
+                    color = '#4CAF50';
+                    break;
+                case 5:
+                    message = 'Imara Sana';
+                    color = '#2E7D32';
+                    break;
+            }
+            
+            strengthIndicator.innerHTML = `
+                <span style="color: ${color}; font-weight: 600;">Nguvu: ${message}</span>
+                <div style="width: 100%; height: 4px; background: #e2e8f0; border-radius: 2px; margin-top: 4px;">
+                    <div style="width: ${(strength / 5) * 100}%; height: 100%; background: ${color}; border-radius: 2px; transition: width 0.3s;"></div>
+                </div>
+            `;
+        });
+
+        console.log('✅ Signup page initialized with Firebase');
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .signup-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 500px;
+            padding: 2.5rem;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .signup-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .signup-header .logo {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .signup-header h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 0.3rem;
+        }
+
+        .signup-header p {
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        .signup-header p span {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Messages */
+        .message {
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            display: none;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 0.3rem;
+            font-size: 0.9rem;
+        }
+
+        .form-group label .required {
+            color: #ff4444;
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            padding-right: 3rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .input-group input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-group input.error {
+            border-color: #ff4444;
+        }
+
+        .input-group .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #888;
+            padding: 5px;
+        }
+
+        .input-group .toggle-password:hover {
+            color: #333;
+        }
+
+        /* Password Strength */
+        .password-strength {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            display: none;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Terms */
+        .terms-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.8rem;
+            margin: 1.2rem 0;
+        }
+
+        .terms-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-top: 2px;
+            accent-color: #667eea;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .terms-group label {
+            font-size: 0.9rem;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .terms-group label a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .terms-group label a:hover {
+            text-decoration: underline;
+        }
+
+        .signup-btn {
+            width: 100%;
+            padding: 0.9rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .signup-btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .signup-btn:disabled {
+            background: #999;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        .login-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s;
+        }
+
+        .login-link a:hover {
+            color: #5a67d8;
+            text-decoration: underline;
+        }
+
+        /* Divider */
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 1.5rem 0;
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .divider::before {
+            margin-right: 1rem;
+        }
+
+        .divider::after {
+            margin-left: 1rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .signup-container {
+                padding: 1.5rem;
+            }
+
+            .signup-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .terms-group {
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="signup-container">
+        <div class="signup-header">
+            <div class="logo">🏪</div>
+            <h1>Jiandikisha <span>STORE</span></h1>
+            <p>Unda akaunti yako mpya</p>
+        </div>
+
+        <!-- Messages -->
+        <div class="message error" id="errorMessage"></div>
+        <div class="message success" id="successMessage"></div>
+
+        <!-- Signup Form -->
+        <form id="signupForm">
+            <div class="form-group">
+                <label>Jina Kamili <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="text" id="fullName" placeholder="Mfano: Juma Mohamed" required autocomplete="name">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Barua Pepe <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="mteja@email.com" required autocomplete="email">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Namba ya Simu <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="tel" id="phone" placeholder="07XX XXX XXX" required autocomplete="tel">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Nenosiri <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Angalau herufi 6" required minlength="6" autocomplete="new-password">
+                    <button type="button" class="toggle-password" id="showPassword">👁️</button>
+                </div>
+                <div class="password-strength" id="passwordStrength"></div>
+            </div>
+
+            <div class="form-group">
+                <label>Thibitisha Nenosiri <span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="password" id="confirmPassword" placeholder="Andika nenosiri tena" required autocomplete="new-password">
+                    <button type="button" class="toggle-password" id="showConfirmPassword">👁️</button>
+                </div>
+            </div>
+
+            <div class="terms-group">
+                <input type="checkbox" id="termsCheck" required>
+                <label for="termsCheck">
+                    Ninakubali <a href="/terms.html">Masharti na Sheria</a> na 
+                    <a href="/privacy.html">Sera ya Faragha</a>
+                </label>
+            </div>
+
+            <button type="submit" class="signup-btn" id="signupBtn">📝 Jiandikisha</button>
+        </form>
+
+        <div class="divider">au</div>
+
+        <div class="login-link">
+            Tayari una akaunti? <a href="/login.html">Ingia Sasa</a>
+        </div>
+    </div>
+
+    <script>
+        // Quick fix - ensure messages are hidden on page load
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+    </script>
+</body>
+</html>
